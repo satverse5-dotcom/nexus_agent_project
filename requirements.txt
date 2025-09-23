@@ -1,0 +1,15 @@
+torch
+transformers
+accelerate
+bitsandbytes
+langchain
+langgraph
+langchain-community
+streamlit
+python-dotenv
+beautifulsoup4
+selenium
+webdriver-manager
+faiss-cpu
+tavily-python
+pandas

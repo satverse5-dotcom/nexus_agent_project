@@ -1,0 +1,162 @@
+# app.py
+import os
+from dotenv import load_dotenv
+import streamlit as st
+from agent import LangGraphAgent
+from gemini_chat import get_gemini_response
+from langchain_google_genai import ChatGoogleGenerativeAI
+from google.auth import default as google_auth_default
+
+# -----------------------------------------------------
+# 0️⃣ Set Google Service Account (if using JSON key)
+# -----------------------------------------------------
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = r"C:\Users\Asus\Downloads\rare-lattice-466504-b2-8c9a274e953d.json"
+print("GOOGLE_APPLICATION_CREDENTIALS =", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+
+# -----------------------------------------------------
+# 1️⃣ Load .env Variables (Gemini API Key)
+# -----------------------------------------------------
+load_dotenv()
+gemini_key = os.getenv("GEMINI_API_KEY")
+if gemini_key:
+    os.environ["GEMINI_API_KEY"] = gemini_key  # Ensure LangChain can read it
+
+# -----------------------------------------------------
+# 2️⃣ Check Google ADC Credentials
+# -----------------------------------------------------
+use_adc, project = False, None
+try:
+    credentials, project = google_auth_default()
+    if credentials:
+        use_adc = True
+except Exception as e:
+    st.sidebar.warning(f"ADC not available: {e}")
+
+# -----------------------------------------------------
+# 2️⃣a ADC Test Button
+# -----------------------------------------------------
+st.sidebar.markdown("---")
+if st.sidebar.button("Test Google ADC"):
+    try:
+        credentials, project = google_auth_default()
+        st.sidebar.success("✅ ADC detected!")
+        st.sidebar.write("Project ID:", project)
+        st.sidebar.write("Scopes:", credentials.scopes)
+    except Exception as e:
+        st.sidebar.error(f"❌ ADC not available: {e}")
+
+# -----------------------------------------------------
+# 3️⃣ Authentication Fallback
+# -----------------------------------------------------
+if not use_adc and not gemini_key:
+    st.error("❌ Neither Google ADC credentials nor GEMINI_API_KEY found.")
+    st.stop()
+
+if use_adc:
+    st.sidebar.success(f"✅ Using Google ADC (Project: {project})")
+else:
+    st.sidebar.info("✅ Using GEMINI_API_KEY from .env")
+
+# -----------------------------------------------------
+# 4️⃣ Streamlit Page Setup
+# -----------------------------------------------------
+st.set_page_config(
+    page_title="NexusAgent 2.0",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.title("🚀 NexusAgent 2.0: Advanced Autonomous AI")
+st.markdown(
+    """
+    Powered by **Google Gemini API**  
+    - 🧩 **Agent Mode (LangGraph)**: Goal-driven autonomous agent  
+    - 💬 **Direct Chat (Gemini 2.5 Flash)**: Simple Q&A chatbot
+    """
+)
+
+# -----------------------------------------------------
+# 5️⃣ Sidebar Mode Switch
+# -----------------------------------------------------
+mode = st.sidebar.radio(
+    "Choose Mode:",
+    ["Agent Mode (LangGraph)", "Direct Chat (Gemini 2.5 Flash)"],
+)
+
+# -----------------------------------------------------
+# 6️⃣ Helper to create Gemini LLM
+# -----------------------------------------------------
+def create_gemini_llm():
+    """Return a LangChain Google Generative AI model instance."""
+    return ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.7
+    )
+
+# -----------------------------------------------------
+# 7️⃣ AGENT MODE
+# -----------------------------------------------------
+if mode == "Agent Mode (LangGraph)":
+    st.header("Set a Goal for the Agent")
+    user_goal = st.text_input(
+        "Enter what you want the agent to accomplish:",
+        placeholder="e.g., Summarize the latest AI news."
+    )
+
+    if "agent" not in st.session_state:
+        try:
+            st.session_state.agent = LangGraphAgent(llm=create_gemini_llm())
+        except Exception as e:
+            st.exception(e)
+            st.stop()
+
+    if st.button("Execute Agent"):
+        if not user_goal.strip():
+            st.warning("⚠️ Please enter a goal for the agent to execute.")
+        else:
+            st.write("---")
+            st.subheader("Agent Execution Log")
+            with st.spinner("🤖 NexusAgent (Gemini) is working..."):
+                try:
+                    stream = st.session_state.agent.run(user_goal)
+                    final_answer = ""
+                    for chunk in stream:
+                        agent_data = chunk.get("agent", {})
+                        messages = agent_data.get("messages", [])
+                        if messages:
+                            # ✅ HumanMessage/AIMessage → use .content directly
+                            final_answer = getattr(messages[-1], "content", "")
+
+                    if final_answer:
+                        st.success("**Final Answer:**")
+                        st.markdown(final_answer)
+                    else:
+                        st.warning("⚠️ No response generated by the agent.")
+                except Exception as e:
+                    st.exception(e)
+
+# -----------------------------------------------------
+# 8️⃣ DIRECT CHAT MODE
+# -----------------------------------------------------
+else:
+    st.header("💬 Direct Gemini Chat")
+
+    with st.form(key="chat_form", clear_on_submit=True):
+        user_input = st.text_input("Enter your message:")
+        submit_button = st.form_submit_button("Send")
+
+    if submit_button:
+        if not user_input.strip():
+            st.warning("⚠️ Please enter a message to send.")
+        else:
+            with st.spinner("✨ Gemini is thinking..."):
+                try:
+                    # ✅ Reads API key from environment automatically
+                    response_text = get_gemini_response(
+                        user_input,
+                        model_name="gemini-2.5-flash"
+                    )
+                    st.success("**Gemini’s Reply:**")
+                    st.markdown(response_text)
+                except Exception as e:
+                    st.exception(e)

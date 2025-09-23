@@ -1,0 +1,12 @@
+# Python virtual environment folder
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Environment file with secrets (for local development)
+.env
+
+# Streamlit configuration
+.streamlit/
