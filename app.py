@@ -8,23 +8,31 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from google.auth import default as google_auth_default
 
 # -----------------------------------------------------
-# 0️⃣ Set Google Service Account (if using JSON key)
+# 0️⃣ Load local .env and Streamlit Secrets for API keys
 # -----------------------------------------------------
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = r"C:\Users\Asus\Downloads\rare-lattice-466504-b2-8c9a274e953d.json"
-print("GOOGLE_APPLICATION_CREDENTIALS =", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+load_dotenv()  # Load local .env for development
+gemini_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+tavily_key = st.secrets.get("TAVILY_API_KEY") or os.getenv("TAVILY_API_KEY")
+google_json_path = st.secrets.get("GOOGLE_APPLICATION_CREDENTIALS") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 # -----------------------------------------------------
-# 1️⃣ Load .env Variables (Gemini API Key)
+# 0️⃣a Set Google JSON path explicitly from repo
 # -----------------------------------------------------
-load_dotenv()
-gemini_key = os.getenv("GEMINI_API_KEY")
+if google_json_path:
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.join(
+        os.getcwd(), os.path.basename(google_json_path)
+    )
+
+# Set environment variables for LangChain / Google SDK
 if gemini_key:
-    os.environ["GEMINI_API_KEY"] = gemini_key  # Ensure LangChain can read it
+    os.environ["GEMINI_API_KEY"] = gemini_key
+if tavily_key:
+    os.environ["TAVILY_API_KEY"] = tavily_key
 
 # -----------------------------------------------------
-# 2️⃣ Check Google ADC Credentials
+# 1️⃣ Check for credentials / API keys
 # -----------------------------------------------------
-use_adc, project = False, None
+use_adc = False
 try:
     credentials, project = google_auth_default()
     if credentials:
@@ -32,33 +40,14 @@ try:
 except Exception as e:
     st.sidebar.warning(f"ADC not available: {e}")
 
-# -----------------------------------------------------
-# 2️⃣a ADC Test Button
-# -----------------------------------------------------
-st.sidebar.markdown("---")
-if st.sidebar.button("Test Google ADC"):
-    try:
-        credentials, project = google_auth_default()
-        st.sidebar.success("✅ ADC detected!")
-        st.sidebar.write("Project ID:", project)
-        st.sidebar.write("Scopes:", credentials.scopes)
-    except Exception as e:
-        st.sidebar.error(f"❌ ADC not available: {e}")
-
-# -----------------------------------------------------
-# 3️⃣ Authentication Fallback
-# -----------------------------------------------------
-if not use_adc and not gemini_key:
-    st.error("❌ Neither Google ADC credentials nor GEMINI_API_KEY found.")
+if not gemini_key and not use_adc:
+    st.error("❌ Neither GEMINI_API_KEY nor Google ADC credentials found.")
     st.stop()
-
-if use_adc:
-    st.sidebar.success(f"✅ Using Google ADC (Project: {project})")
 else:
-    st.sidebar.info("✅ Using GEMINI_API_KEY from .env")
+    st.sidebar.info("✅ Using GEMINI_API_KEY from Secrets/.env or Google ADC")
 
 # -----------------------------------------------------
-# 4️⃣ Streamlit Page Setup
+# 2️⃣ Streamlit Page Setup
 # -----------------------------------------------------
 st.set_page_config(
     page_title="NexusAgent 2.0",
@@ -76,7 +65,7 @@ st.markdown(
 )
 
 # -----------------------------------------------------
-# 5️⃣ Sidebar Mode Switch
+# 3️⃣ Sidebar Mode Switch
 # -----------------------------------------------------
 mode = st.sidebar.radio(
     "Choose Mode:",
@@ -84,17 +73,17 @@ mode = st.sidebar.radio(
 )
 
 # -----------------------------------------------------
-# 6️⃣ Helper to create Gemini LLM
+# 4️⃣ Helper to create Gemini LLM
 # -----------------------------------------------------
 def create_gemini_llm():
-    """Return a LangChain Google Generative AI model instance."""
     return ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
-        temperature=0.7
+        temperature=0.7,
+        google_api_key=gemini_key  # Always use API key if provided
     )
 
 # -----------------------------------------------------
-# 7️⃣ AGENT MODE
+# 5️⃣ AGENT MODE
 # -----------------------------------------------------
 if mode == "Agent Mode (LangGraph)":
     st.header("Set a Goal for the Agent")
@@ -124,7 +113,6 @@ if mode == "Agent Mode (LangGraph)":
                         agent_data = chunk.get("agent", {})
                         messages = agent_data.get("messages", [])
                         if messages:
-                            # ✅ HumanMessage/AIMessage → use .content directly
                             final_answer = getattr(messages[-1], "content", "")
 
                     if final_answer:
@@ -136,7 +124,7 @@ if mode == "Agent Mode (LangGraph)":
                     st.exception(e)
 
 # -----------------------------------------------------
-# 8️⃣ DIRECT CHAT MODE
+# 6️⃣ DIRECT CHAT MODE
 # -----------------------------------------------------
 else:
     st.header("💬 Direct Gemini Chat")
@@ -151,7 +139,6 @@ else:
         else:
             with st.spinner("✨ Gemini is thinking..."):
                 try:
-                    # ✅ Reads API key from environment automatically
                     response_text = get_gemini_response(
                         user_input,
                         model_name="gemini-2.5-flash"
