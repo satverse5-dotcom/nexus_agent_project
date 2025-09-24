@@ -5,6 +5,7 @@ bitsandbytes
 langchain
 langgraph
 langchain-community
+langchain-google-genai    # ✅ Required for: from langchain_google_genai import ...
 streamlit
 python-dotenv
 beautifulsoup4
@@ -13,3 +14,4 @@ webdriver-manager
 faiss-cpu
 tavily-python
 pandas
+
